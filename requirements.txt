@@ -5,10 +5,6 @@ scikit-learn
 PyYAML
 shap
 joblib
-altair
+matplotlib
 pyradiomics
 SimpleITK
-PyWavelets
-xgboost
-lightgbm
-matplotlib
