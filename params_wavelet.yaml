@@ -1,0 +1,28 @@
+# params_wavelet.yaml
+
+# 图像类型设置 (关键部分)
+imageType:
+  Original: {}   # 明确包含原始图像特征
+  Wavelet: {}    # 启用小波特征 (使用默认小波设置)
+  LoG:         # 如果也想启用 LoG，取消注释下面这行
+    sigma: [1.0, 2.0, 3.0] # 可以指定不同的 sigma 值
+  SquareRoot: {}
+# 全局设置 (可选，但常用)
+setting:
+  binWidth: 25                 # 灰度离散化 bin 宽度
+  resampledPixelSpacing: [1,1,1]  # 设置为 null 表示不进行重采样，或指定 [x,y,z] 如 [1,1,1]
+  interpolator: 'sitkBSpline'  # 重采样时使用的插值器
+  label: 1                     # 分割掩码中的标签值 (如果不是1，请修改)
+  normalize: true
+  # force2D: false
+  # 
+
+# 特征类别设置 (这部分会被脚本中的 enableAllFeatures() 覆盖，但写上无妨)
+# featureClass:
+#   shape:       # 示例：只写 shape 类
+#   firstorder:
+#   glcm:
+#   glrlm:
+#   glszm:
+#   ngtdm:
+#   gldm:
