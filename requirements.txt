@@ -8,3 +8,5 @@ joblib
 matplotlib
 pyradiomics
 SimpleITK
+xgboost
+lightgbm
