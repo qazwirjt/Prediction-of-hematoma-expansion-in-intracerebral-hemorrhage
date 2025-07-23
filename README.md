@@ -9,7 +9,7 @@ If you have any questions, please contact me via 2573790043@qq.com
 
 --- BEGIN ---
 
-conda activate radiomics_app
+conda activate your_env
 
 cd path/to/this/python file
 
