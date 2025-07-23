@@ -12,20 +12,26 @@ import yaml
 import json
 import re
 
+
+# Due to the sensitivity and specific characteristics of medical image files, you may download the code for local execution.Enter the following command in the terminal.
+# If you have any questions, please contact me via 2573790043@qq.com
+# --- BEGIN ---
 # conda activate radiomics_app
-# streamlit run 8.py
+# cd path/to/this/python file
+# streamlit run webapp.py
+# --- END ---
 
 
-# --- 0. 应用配置和全局变量 ---
-st.set_page_config(layout="wide", page_title="影像组学模型预测与SHAP分析 - 增强版")
+# Title
+st.set_page_config(layout="wide", page_title="Radiomics Model for The Prediction of Hematoma Expansion & SHAP Analysis")
 
-# --- 关键路径和文件名 ---
+# --- Key Paths and Filenames ---
 SERIALIZED_MODELS_DIR = "serialized_models"
 STANDARDIZATION_PARAMS_PATH = "standardization_parameters.csv"
 SHAP_BACKGROUND_DATA_PATH = "shap_background_data.csv"
 RADIOMICS_PARAMS_PATH = "params_wavelet.yaml"
 
-# --- 初始化session state ---
+
 if 'radiomic_features' not in st.session_state:
     st.session_state.radiomic_features = {}
 if 'clinical_features' not in st.session_state:
@@ -35,22 +41,55 @@ if 'all_extracted_features' not in st.session_state:
 if 'show_standardization_details' not in st.session_state:
     st.session_state.show_standardization_details = False
 
-# --- 1. 辅助函数和加载函数 ---
+# --- 1. Helper Functions and Loading Functions ---
+def create_optimized_waterfall_plot(shap_values, feature_names=None, max_display=15):
+    """Create optimized SHAP waterfall plot"""
+    # Set font for better display
+    plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'SimHei', 'Arial Unicode MS']
+    plt.rcParams['axes.unicode_minus'] = False
+    
+    # Create figure
+    fig = plt.figure(figsize=(10, min(max_display * 0.5 + 2, 8)))
+    ax = plt.gca()
+    
+    # Generate waterfall plot
+    shap.waterfall_plot(
+        shap_values, 
+        show=False, 
+        max_display=max_display
+    )
+    
+    # Optimize layout
+    plt.subplots_adjust(left=0.4, right=0.95, top=0.92, bottom=0.08)
+    
+    # Adjust font sizes
+    ax.tick_params(axis='y', labelsize=10)
+    ax.tick_params(axis='x', labelsize=11)
+    
+    # Add grid lines
+    ax.grid(True, axis='x', alpha=0.3, linestyle='--')
+    
+    # Set title
+    ax.set_title('SHAP Feature Contribution Analysis', fontsize=14, fontweight='bold', pad=15)
+    ax.set_xlabel('SHAP Value (Impact on Prediction)', fontsize=12)
+    
+    return fig
+
 @st.cache_data
 def load_csv_data(path):
     try:
         df = pd.read_csv(path)
         return df
     except FileNotFoundError:
-        st.error(f"CSV文件 '{path}' 未找到。")
+        st.error(f"CSV file '{path}' not found.")
         return None
     except Exception as e:
-        st.error(f"加载CSV文件 '{path}' 时出错: {e}")
+        st.error(f"Error loading CSV file '{path}': {e}")
         return None
 
 @st.cache_data
 def load_standardization_parameters(path):
-    """加载标准化参数CSV文件"""
+    """Load standardization parameters CSV file"""
     try:
         params_df = pd.read_csv(path)
         
@@ -70,53 +109,53 @@ def load_standardization_parameters(path):
         
         return standardization_info
     except FileNotFoundError:
-        st.error(f"标准化参数文件 '{path}' 未找到。")
+        st.error(f"Standardization parameters file '{path}' not found.")
         return None
     except Exception as e:
-        st.error(f"加载标准化参数文件时出错: {e}")
+        st.error(f"Error loading standardization parameters file: {e}")
         return None
 
 @st.cache_data
 def load_radiomics_params(path):
-    """加载PyRadiomics参数配置文件"""
+    """Load PyRadiomics parameters configuration file"""
     try:
         with open(path, 'r', encoding='utf-8') as f:
             params = yaml.safe_load(f)
         return params
     except FileNotFoundError:
-        st.error(f"PyRadiomics配置文件 '{path}' 未找到。")
+        st.error(f"PyRadiomics configuration file '{path}' not found.")
         return None
     except Exception as e:
-        st.error(f"加载PyRadiomics配置文件时出错: {e}")
+        st.error(f"Error loading PyRadiomics configuration file: {e}")
         return None
 
 @st.cache_resource
 def load_model_file(path):
-    """加载模型文件"""
+    """Load model file"""
     try:
         import joblib
         return joblib.load(path)
     except FileNotFoundError:
-        st.error(f"模型文件 '{path}' 未找到。")
+        st.error(f"Model file '{path}' not found.")
         return None
     except Exception as e:
-        st.error(f"加载模型文件 '{path}' 时出错: {e}")
+        st.error(f"Error loading model file '{path}': {e}")
         return None
 
-# 加载必要的资源
+# Load necessary resources
 standardization_info = load_standardization_parameters(STANDARDIZATION_PARAMS_PATH)
 shap_background_df = load_csv_data(SHAP_BACKGROUND_DATA_PATH)
 radiomics_params = load_radiomics_params(RADIOMICS_PARAMS_PATH)
 
-# 检查标准化参数是否成功加载
+# Check if standardization parameters loaded successfully
 if standardization_info is not None:
-    st.sidebar.success(f"✓ 成功加载标准化参数：{len(standardization_info['continuous_features'])} 个连续特征，{len(standardization_info['binary_features'])} 个二元特征")
+    st.sidebar.success(f"✓ Successfully loaded standardization parameters: {len(standardization_info['continuous_features'])} continuous features, {len(standardization_info['binary_features'])} binary features")
 else:
-    st.sidebar.error("⚠️ 无法加载标准化参数文件")
+    st.sidebar.error("Unable to load standardization parameters file")
 
-# --- 特征分类函数 ---
+# --- Feature Classification Functions ---
 def classify_features(feature_names):
-    """基于标准化参数文件中的信息分类特征"""
+    """Classify features based on information in standardization parameters file"""
     if standardization_info is None:
         radiomic_keywords = [
             'original_', 'wavelet_', 'wavelet-', 'log_', 'log-sigma-', 
@@ -171,7 +210,7 @@ def classify_features(feature_names):
     return radiomic_features, clinical_features
 
 def identify_variable_type(series):
-    """识别变量类型：二分类或连续型"""
+    """Identify variable type: binary or continuous"""
     non_null_values = series.dropna()
     
     if len(non_null_values) == 0:
@@ -188,60 +227,60 @@ def identify_variable_type(series):
     
     return 'continuous', None
 
-# 获取特征分类
+# Get feature classification
 if shap_background_df is not None:
     FEATURE_ORDER = list(shap_background_df.columns)
     FEATURE_ORDER = [f for f in FEATURE_ORDER if f.upper() != 'STATUS']
     RADIOMIC_FEATURES, CLINICAL_FEATURES = classify_features(FEATURE_ORDER)
     
     with st.sidebar:
-        st.info(f"检测到的特征统计:\n- 影像组学特征: {len(RADIOMIC_FEATURES)} 个\n- 临床特征: {len(CLINICAL_FEATURES)} 个")
+        st.info(f"Detected feature statistics:\n- Radiomic features: {len(RADIOMIC_FEATURES)}\n- Clinical features: {len(CLINICAL_FEATURES)}")
 else:
     FEATURE_ORDER = []
     RADIOMIC_FEATURES = []
     CLINICAL_FEATURES = []
 
-# --- 2. 影像特征提取函数 ---
+# --- 2. Radiomics Feature Extraction Functions ---
 def extract_radiomics_features(image_path, mask_path, params):
     """
-    使用PyRadiomics从NIfTI图像中提取影像组学特征
+    Extract radiomics features from NIfTI images using PyRadiomics
     """
     try:
-        # 根据是否有参数文件来初始化特征提取器
+        # Initialize feature extractor based on whether params exist
         if params:
-            # 保存参数到临时YAML文件（如果params是字典）
+            # Save params to temporary YAML file (if params is dict)
             if isinstance(params, dict):
                 import tempfile
                 with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as temp_yaml:
                     yaml.dump(params, temp_yaml)
                     temp_yaml_path = temp_yaml.name
                 
-                # 使用临时YAML文件初始化
+                # Initialize with temporary YAML file
                 extractor = featureextractor.RadiomicsFeatureExtractor(temp_yaml_path)
                 
-                # 删除临时文件
+                # Delete temporary file
                 os.unlink(temp_yaml_path)
             else:
-                # 如果params是文件路径，直接使用
+                # If params is file path, use directly
                 extractor = featureextractor.RadiomicsFeatureExtractor(params)
         else:
-            # 没有参数文件时使用默认初始化
+            # Use default initialization without params file
             extractor = featureextractor.RadiomicsFeatureExtractor()
         
-        # 关键步骤：强制启用所有特征类别（与训练代码保持一致）
+        # Key step: Force enable all feature classes (consistent with training code)
         extractor.enableAllFeatures()
-        st.info("已启用所有特征类别")
+        st.info("All feature classes enabled")
         
-        # 记录启用的图像类型
+        # Log enabled image types
         enabled_image_types = extractor.enabledImagetypes
         if enabled_image_types:
-            st.info(f"启用的图像类型: {list(enabled_image_types.keys())}")
+            st.info(f"Enabled image types: {list(enabled_image_types.keys())}")
         
-        # 提取特征
-        st.info("正在提取影像组学特征，请稍候...")
+        # Extract features
+        st.info("Extracting radiomics features, please wait...")
         feature_vector = extractor.execute(image_path, mask_path)
         
-        # 转换为字典，只保留特征值（排除诊断信息）
+        # Convert to dictionary, keep only feature values (exclude diagnostic info)
         feature_dict = {}
         for key, value in feature_vector.items():
             if not key.startswith('diagnostics_'):
@@ -250,22 +289,22 @@ def extract_radiomics_features(image_path, mask_path, params):
                 except Exception:
                     feature_dict[key] = value
         
-        st.success(f"成功提取 {len(feature_dict)} 个特征")
+        st.success(f"Successfully extracted {len(feature_dict)} features")
         return feature_dict
         
     except Exception as e:
-        st.error(f"特征提取失败: {e}")
+        st.error(f"Feature extraction failed: {e}")
         import traceback
-        st.error(f"详细错误信息: {traceback.format_exc()}")
+        st.error(f"Detailed error information: {traceback.format_exc()}")
         return None
 
 def filter_and_standardize_features(extracted_features, background_features, standardization_params):
-    """筛选影像组学特征，但不进行标准化"""
+    """Filter radiomics features without standardization"""
     st.session_state.all_extracted_features = extracted_features
     
     if standardization_params is not None:
         expected_features = standardization_params['continuous_features'] + standardization_params['binary_features']
-        st.info(f"标准化参数期望 {len(expected_features)} 个特征")
+        st.info(f"Standardization parameters expect {len(expected_features)} features")
         
         filtered_features = {}
         if background_features is not None:
@@ -275,7 +314,7 @@ def filter_and_standardize_features(extracted_features, background_features, sta
                 if any(keyword in col.lower() for keyword in ['original_', 'wavelet', 'log-sigma', 'squareroot_']):
                     background_radiomic_features.append(col)
             
-            st.info(f"背景数据集包含 {len(background_radiomic_features)} 个影像组学特征")
+            st.info(f"Background dataset contains {len(background_radiomic_features)} radiomic features")
             
             for feature in background_radiomic_features:
                 if feature in extracted_features:
@@ -283,7 +322,7 @@ def filter_and_standardize_features(extracted_features, background_features, sta
                 else:
                     filtered_features[feature] = background_features[feature].median()
         
-        st.success(f"从提取的特征中筛选了 {len(filtered_features)} 个用于显示的影像组学特征")
+        st.success(f"Filtered {len(filtered_features)} radiomic features for display from extracted features")
     else:
         filtered_features = {}
         for feature in RADIOMIC_FEATURES:
@@ -297,19 +336,19 @@ def filter_and_standardize_features(extracted_features, background_features, sta
     
     return filtered_features
 
-# 预处理函数
+# Preprocessing function
 def preprocess_input(input_data_dict, feature_order_list, standardization_params=None):
-    """将用户输入的字典转换为模型可接受的DataFrame，并进行预处理"""
+    """Convert user input dictionary to model-acceptable DataFrame and preprocess"""
     try:
         if standardization_params is None:
-            st.error("⚠️ 标准化参数未加载，无法进行特征标准化！")
+            st.error("Standardization parameters not loaded, unable to standardize features!")
             return None
             
         continuous_features = standardization_params['continuous_features']
         mean_dict = standardization_params['mean_dict']
         std_dict = standardization_params['std_dict']
         
-        # 收集所有可用的原始特征值
+        # Collect all available raw feature values
         all_raw_features = {}
         all_extracted = getattr(st.session_state, 'all_extracted_features', {})
         
@@ -324,7 +363,7 @@ def preprocess_input(input_data_dict, feature_order_list, standardization_params
             if feature not in all_raw_features:
                 all_raw_features[feature] = all_extracted[feature]
         
-        # 构建最终用于预测的DataFrame
+        # Build final DataFrame for prediction
         final_features = {}
         standardization_log = []
         
@@ -340,7 +379,7 @@ def preprocess_input(input_data_dict, feature_order_list, standardization_params
                         'mean': mean_dict[feature],
                         'std': std_dict[feature],
                         'standardized_value': standardized_value,
-                        'status': '已标准化'
+                        'status': 'Standardized'
                     })
                 else:
                     if shap_background_df is not None and feature in shap_background_df.columns:
@@ -357,7 +396,7 @@ def preprocess_input(input_data_dict, feature_order_list, standardization_params
                     'mean': 'N/A',
                     'std': 'N/A',
                     'standardized_value': all_raw_features[feature],
-                    'status': '二元特征'
+                    'status': 'Binary Feature'
                 })
             else:
                 if shap_background_df is not None and feature in shap_background_df.columns:
@@ -365,7 +404,7 @@ def preprocess_input(input_data_dict, feature_order_list, standardization_params
                 else:
                     final_features[feature] = 0.0
         
-        # 存储标准化日志供后续显示
+        # Store standardization log for display
         st.session_state.standardization_log = standardization_log
         
         final_df = pd.DataFrame([final_features])
@@ -373,33 +412,33 @@ def preprocess_input(input_data_dict, feature_order_list, standardization_params
         
         if final_df.isnull().values.any():
             nan_columns = final_df.columns[final_df.isnull().any()].tolist()
-            st.error(f"❌ 以下特征包含NaN值: {nan_columns}")
+            st.error(f"The following features contain NaN values: {nan_columns}")
             final_df.fillna(0, inplace=True)
         
         return final_df
             
     except Exception as e:
-        st.error(f"❌ 预处理失败: {str(e)}")
+        st.error(f"Preprocessing failed: {str(e)}")
         import traceback
-        with st.expander("查看详细错误信息"):
+        with st.expander("View detailed error information"):
             st.code(traceback.format_exc())
         return None
 
-# --- 3. Streamlit 应用界面 ---
-st.title("影像组学模型预测与SHAP可解释性分析")
+# --- 3. Streamlit App Interface ---
+st.title("Radiomics Model Prediction & SHAP Interpretability Analysis")
 
-# --- 侧边栏配置 ---
-st.sidebar.header("模型选择")
+# --- Sidebar Configuration ---
+st.sidebar.header("Model Selection")
 model_files = [f for f in os.listdir(SERIALIZED_MODELS_DIR) if f.endswith(".joblib")]
 if not model_files:
-    st.error(f"在 '{SERIALIZED_MODELS_DIR}' 目录下未找到模型文件。")
+    st.error(f"No model files found in '{SERIALIZED_MODELS_DIR}' directory.")
     st.stop()
 
 model_display_names = [os.path.splitext(f)[0].replace("_", " ") for f in model_files]
 model_name_to_file_map = dict(zip(model_display_names, model_files))
 
 selected_model_display_name = st.sidebar.selectbox(
-    "选择预测模型:",
+    "Select prediction model:",
     options=model_display_names,
     index=model_display_names.index("Logistic Regression") if "Logistic Regression" in model_display_names else 0
 )
@@ -409,28 +448,28 @@ model_path = os.path.join(SERIALIZED_MODELS_DIR, selected_model_filename)
 model = load_model_file(model_path)
 
 if model is None:
-    st.error("模型加载失败。")
+    st.error("Model loading failed.")
     st.stop()
 
-st.sidebar.success(f"✓ 已加载模型: {selected_model_display_name}")
+st.sidebar.success(f"✓ Model loaded: {selected_model_display_name}")
 
-# --- 影像文件上传区域 ---
-st.sidebar.header("影像文件上传")
-st.sidebar.info("请上传NIfTI格式的原始图像和掩码文件（.nii或.nii.gz）")
+# --- Image File Upload Area ---
+st.sidebar.header("Image File Upload")
+st.sidebar.info("Please upload NIfTI format image and mask files (.nii or .nii.gz)")
 
 image_file = st.sidebar.file_uploader(
-    "选择原始图像文件:",
+    "Select original image file:",
     type=['nii', 'gz'],
     key="image_uploader"
 )
 
 mask_file = st.sidebar.file_uploader(
-    "选择掩码文件:",
+    "Select mask file:",
     type=['nii', 'gz'],
     key="mask_uploader"
 )
 
-# 处理上传的文件并提取特征
+# Process uploaded files and extract features
 if image_file and mask_file:
     with tempfile.TemporaryDirectory() as temp_dir:
         image_path = os.path.join(temp_dir, image_file.name)
@@ -441,8 +480,8 @@ if image_file and mask_file:
         with open(mask_path, 'wb') as f:
             f.write(mask_file.getbuffer())
         
-        if st.sidebar.button("提取影像组学特征", type="secondary"):
-            with st.spinner("正在提取特征..."):
+        if st.sidebar.button("Extract Radiomics Features", type="secondary"):
+            with st.spinner("Extracting features..."):
                 extracted_features = extract_radiomics_features(
                     image_path, mask_path, radiomics_params
                 )
@@ -453,12 +492,12 @@ if image_file and mask_file:
                     )
                     
                     st.session_state.radiomic_features = filtered_features
-                    st.sidebar.success(f"成功提取了 {len(filtered_features)} 个影像组学特征（原始值）")
+                    st.sidebar.success(f"Successfully extracted {len(filtered_features)} radiomic features (raw values)")
                 else:
-                    st.sidebar.error("特征提取失败")
+                    st.sidebar.error("Feature extraction failed")
 
-# --- 特征输入区域 ---
-st.sidebar.header("特征值输入")
+# --- Feature Input Area ---
+st.sidebar.header("Feature Value Input")
 
 input_values = {}
 
@@ -466,10 +505,10 @@ default_input_values = {}
 if shap_background_df is not None and not shap_background_df.empty:
     default_input_values = shap_background_df.iloc[0].to_dict()
 
-# 影像组学特征输入
+# Radiomic features input
 if RADIOMIC_FEATURES:
-    st.sidebar.subheader("影像组学特征")
-    radiomic_display = st.sidebar.checkbox("显示影像组学特征输入框", value=False)
+    st.sidebar.subheader("Radiomic Features")
+    radiomic_display = st.sidebar.checkbox("Show radiomic feature input fields", value=False)
     
     if radiomic_display:
         for feature in RADIOMIC_FEATURES:
@@ -491,9 +530,9 @@ if RADIOMIC_FEATURES:
             else:
                 input_values[feature] = default_input_values.get(feature, 0.0)
 
-# 临床特征输入
+# Clinical features input
 if CLINICAL_FEATURES:
-    st.sidebar.subheader("临床特征（请手动输入原始值）")
+    st.sidebar.subheader("Clinical Features (Please enter raw values manually)")
     
     clinical_feature_types = {}
     if shap_background_df is not None:
@@ -526,51 +565,51 @@ if CLINICAL_FEATURES:
                 format="%.2f"
             )
 
-# --- 主界面 ---
-if st.sidebar.button("执行预测与分析", type="primary", use_container_width=True):
-    # 创建标签页
-    tab1, tab2, tab3 = st.tabs(["特征预处理", "预测结果与SHAP分析", "标准化详情"])
+# --- Main Interface ---
+if st.sidebar.button("Run Prediction & Analysis", type="primary", use_container_width=True):
+    # Create tabs
+    tab1, tab2, tab3 = st.tabs(["Feature Preprocessing", "Prediction Results & SHAP Analysis", "Standardization Details"])
     
-    # 预处理数据
+    # Preprocess data
     processed_input_df = preprocess_input(input_values, FEATURE_ORDER, standardization_info)
     
-    # Tab 1: 特征预处理
+    # Tab 1: Feature Preprocessing
     with tab1:
-        st.subheader("特征预处理概览")
+        st.subheader("Feature Preprocessing Overview")
         
-        # 显示已标准化特征的摘要
+        # Display standardized feature summary
         col1, col2, col3 = st.columns(3)
         with col1:
-            st.metric("总特征数", len(FEATURE_ORDER))
+            st.metric("Total Features", len(FEATURE_ORDER))
         with col2:
-            st.metric("连续特征数", len(standardization_info['continuous_features']) if standardization_info else 0)
+            st.metric("Continuous Features", len(standardization_info['continuous_features']) if standardization_info else 0)
         with col3:
-            st.metric("二元特征数", len(standardization_info['binary_features']) if standardization_info else 0)
+            st.metric("Binary Features", len(standardization_info['binary_features']) if standardization_info else 0)
         
-        # 简洁的特征展示
-        with st.expander("查看标准化的影像组学特征", expanded=False):
+        # Concise feature display
+        with st.expander("View standardized radiomic features", expanded=False):
             if RADIOMIC_FEATURES and hasattr(st.session_state, 'standardization_log'):
-                radiomic_log = [log for log in st.session_state.standardization_log if log['feature'] in RADIOMIC_FEATURES and log['status'] == '已标准化']
+                radiomic_log = [log for log in st.session_state.standardization_log if log['feature'] in RADIOMIC_FEATURES and log['status'] == 'Standardized']
                 if radiomic_log:
-                    for i, log in enumerate(radiomic_log[:5]):  # 只显示前5个
-                        st.success(f"✓ 特征 '{log['feature']}' 已标准化: {log['raw_value']:.4f} → {log['standardized_value']:.4f}")
+                    for i, log in enumerate(radiomic_log[:5]):  # Show only first 5
+                        st.success(f"✓ Feature '{log['feature']}' standardized: {log['raw_value']:.4f} → {log['standardized_value']:.4f}")
                     if len(radiomic_log) > 5:
-                        st.info(f"... 还有 {len(radiomic_log)-5} 个特征已标准化")
+                        st.info(f"... and {len(radiomic_log)-5} more features standardized")
         
-        with st.expander("查看二元特征", expanded=False):
+        with st.expander("View binary features", expanded=False):
             binary_features_in_input = [f for f in input_values.keys() if f in standardization_info['binary_features']]
             if binary_features_in_input:
                 for feature in binary_features_in_input:
-                    st.info(f"✓ 特征 '{feature}' 使用原始值（二元特征）: {input_values[feature]}")
+                    st.info(f"✓ Feature '{feature}' using raw value (binary feature): {input_values[feature]}")
     
-    # Tab 2: 预测结果与SHAP分析
+    # Tab 2: Prediction Results & SHAP Analysis
     with tab2:
         if processed_input_df is not None:
             col_result, col_shap = st.columns([1, 2])
             
-            # 预测结果列
+            # Prediction results column
             with col_result:
-                st.subheader("模型预测结果")
+                st.subheader("Model Prediction Results")
                 try:
                     model_type = str(type(model))
                     
@@ -580,7 +619,7 @@ if st.sidebar.button("执行预测与分析", type="primary", use_container_widt
                             prediction_proba = model.predict_proba(processed_input_df)
                             prediction = model.predict(processed_input_df)
                         except Exception as xgb_error:
-                            st.warning("尝试使用XGBoost DMatrix格式...")
+                            st.warning("Attempting to use XGBoost DMatrix format...")
                             dmatrix = xgb.DMatrix(processed_input_df)
                             prediction = model.predict(dmatrix)
                             prediction_proba = np.array([[1-prediction[0], prediction[0]]])
@@ -589,8 +628,8 @@ if st.sidebar.button("执行预测与分析", type="primary", use_container_widt
                         prediction_proba = model.predict_proba(processed_input_df)
                         prediction = model.predict(processed_input_df)
                     
-                    # 显示预测结果
-                    st.metric(label="预测类别", value=str(prediction[0]))
+                    # Display prediction results
+                    st.metric(label="Predicted Class", value=str(prediction[0]))
                     
                     if len(prediction_proba[0]) > 1:
                         prob_positive_class = prediction_proba[0][1]
@@ -599,17 +638,17 @@ if st.sidebar.button("执行预测与分析", type="primary", use_container_widt
                     
                     prob_positive_class = float(prob_positive_class)
                     
-                    st.metric(label="阳性类别概率", value=f"{prob_positive_class:.4f}")
+                    st.metric(label="Positive Class Probability", value=f"{prob_positive_class:.4f}")
                     st.progress(prob_positive_class)
                     
                 except Exception as e:
-                    st.error(f"预测时发生错误: {e}")
+                    st.error(f"Error occurred during prediction: {e}")
                     prediction = None
             
-            # SHAP分析列
+            # SHAP analysis column
             with col_shap:
                 if prediction is not None:
-                    st.subheader("SHAP 可解释性分析")
+                    st.subheader("SHAP Interpretability Analysis")
                     try:
                         explainer = None
                         model_type_str = str(type(model)).lower()
@@ -642,41 +681,71 @@ if st.sidebar.button("执行预测与分析", type="primary", use_container_widt
                         if explainer is not None:
                             shap_values_instance = explainer(processed_input_df)
                             
-                            # 调整瀑布图大小
-                            fig_waterfall = plt.figure(figsize=(12, 10))
-                            
+                            # Optimize waterfall plot display
                             if isinstance(shap_values_instance, shap.Explanation):
-                                shap.waterfall_plot(shap_values_instance[0], show=False, max_display=20)
+                                # Use optimized waterfall plot function
+                                fig_waterfall = create_optimized_waterfall_plot(
+                                    shap_values_instance[0],
+                                    feature_names=FEATURE_ORDER,
+                                    max_display=15
+                                )
+                                st.pyplot(fig_waterfall, clear_figure=True)
+                                plt.close()
+                                
+                                # Add feature importance table
+                                with st.expander("View detailed feature importance", expanded=False):
+                                    # Extract SHAP values and create DataFrame
+                                    feature_importance = pd.DataFrame({
+                                        'Feature Name': FEATURE_ORDER,
+                                        'SHAP Value': shap_values_instance[0].values,
+                                        'Feature Value': processed_input_df.iloc[0].values
+                                    })
+                                    
+                                    # Sort by absolute SHAP value
+                                    feature_importance['Absolute SHAP'] = abs(feature_importance['SHAP Value'])
+                                    feature_importance = feature_importance.sort_values('Absolute SHAP', ascending=False)
+                                    
+                                    # Display top 15 most important features
+                                    st.dataframe(
+                                        feature_importance.head(15)[['Feature Name', 'SHAP Value', 'Feature Value']],
+                                        hide_index=True,
+                                        use_container_width=True
+                                    )
                             else:
-                                st.warning("SHAP值格式不支持瀑布图，尝试其他可视化...")
-                                shap.summary_plot(shap_values_instance, processed_input_df, 
-                                                feature_names=FEATURE_ORDER, show=False)
-                            
-                            plt.tight_layout(pad=2)
-                            st.pyplot(fig_waterfall, clear_figure=True)
-                            plt.close()
+                                st.warning("SHAP value format does not support waterfall plot, trying other visualizations...")
+                                fig_summary = plt.figure(figsize=(10, 6))
+                                shap.summary_plot(
+                                    shap_values_instance, 
+                                    processed_input_df, 
+                                    feature_names=FEATURE_ORDER, 
+                                    show=False,
+                                    max_display=15
+                                )
+                                plt.tight_layout()
+                                st.pyplot(fig_summary, clear_figure=True)
+                                plt.close()
                         
                     except Exception as e:
-                        st.error(f"SHAP分析时出错: {e}")
+                        st.error(f"Error during SHAP analysis: {e}")
                         import traceback
-                        with st.expander("查看详细错误信息"):
+                        with st.expander("View detailed error information"):
                             st.code(traceback.format_exc())
     
-    # Tab 3: 标准化详情
+    # Tab 3: Standardization Details
     with tab3:
-        st.subheader("特征标准化详细信息")
+        st.subheader("Feature Standardization Details")
         
         if hasattr(st.session_state, 'standardization_log'):
-            # 创建详细的标准化信息表格
+            # Create detailed standardization information table
             standardization_df = pd.DataFrame(st.session_state.standardization_log)
             
-            # 分别显示连续特征和二元特征
-            continuous_df = standardization_df[standardization_df['status'] == '已标准化']
-            binary_df = standardization_df[standardization_df['status'] == '二元特征']
+            # Display continuous and binary features separately
+            continuous_df = standardization_df[standardization_df['status'] == 'Standardized']
+            binary_df = standardization_df[standardization_df['status'] == 'Binary Feature']
             
             if not continuous_df.empty:
-                st.write("### 连续特征标准化详情")
-                # 格式化数值列
+                st.write("### Continuous Feature Standardization Details")
+                # Format numeric columns
                 for col in ['raw_value', 'mean', 'std', 'standardized_value']:
                     if col in continuous_df.columns:
                         continuous_df[col] = continuous_df[col].apply(
@@ -690,25 +759,25 @@ if st.sidebar.button("执行预测与分析", type="primary", use_container_widt
                 )
             
             if not binary_df.empty:
-                st.write("### 二元特征")
+                st.write("### Binary Features")
                 st.dataframe(
                     binary_df[['feature', 'raw_value']],
                     hide_index=True,
                     use_container_width=True
                 )
         else:
-            st.info("请先执行预测以查看标准化详情。")
+            st.info("Please run prediction first to view standardization details.")
 
 else:
-    st.info("请上传影像文件或输入特征值，然后点击'执行预测与分析'按钮。")
+    st.info("Please upload image files or enter feature values, then click 'Run Prediction & Analysis' button.")
 
-# --- 应用说明 ---
+# --- App Instructions ---
 st.sidebar.markdown("---")
 st.sidebar.info(
-    "**使用说明:**\n"
-    "1. 选择预测模型\n"
-    "2. 上传NIfTI格式的原始图像和掩码文件\n"
-    "3. 点击'提取影像组学特征'自动填充影像特征\n"
-    "4. 手动输入临床特征值\n"
-    "5. 点击'执行预测与分析'查看结果"
+    "**Instructions:**\n"
+    "1. Select prediction model\n"
+    "2. Upload NIfTI format image and mask files\n"
+    "3. Click 'Extract Radiomics Features' to auto-fill radiomic features\n"
+    "4. Manually enter clinical feature values\n"
+    "5. Click 'Run Prediction & Analysis' to view results"
 )
