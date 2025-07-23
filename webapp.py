@@ -12,7 +12,6 @@ import yaml
 import json
 import re
 
-
 # Due to the sensitivity and specific characteristics of medical image files, you may download the code for local execution.Enter the following command in the terminal.
 # If you have any questions, please contact me via 2573790043@qq.com
 # --- BEGIN ---
@@ -21,8 +20,7 @@ import re
 # streamlit run webapp.py
 # --- END ---
 
-
-# Title
+# --- 0. Title ---
 st.set_page_config(layout="wide", page_title="Radiomics Model for The Prediction of Hematoma Expansion & SHAP Analysis")
 
 # --- Key Paths and Filenames ---
@@ -31,7 +29,7 @@ STANDARDIZATION_PARAMS_PATH = "standardization_parameters.csv"
 SHAP_BACKGROUND_DATA_PATH = "shap_background_data.csv"
 RADIOMICS_PARAMS_PATH = "params_wavelet.yaml"
 
-
+# --- Initialize session state ---
 if 'radiomic_features' not in st.session_state:
     st.session_state.radiomic_features = {}
 if 'clinical_features' not in st.session_state:
@@ -40,6 +38,8 @@ if 'all_extracted_features' not in st.session_state:
     st.session_state.all_extracted_features = {}
 if 'show_standardization_details' not in st.session_state:
     st.session_state.show_standardization_details = False
+if 'clear_clinical_counter' not in st.session_state:
+    st.session_state.clear_clinical_counter = 0
 
 # --- 1. Helper Functions and Loading Functions ---
 def create_optimized_waterfall_plot(shap_values, feature_names=None, max_display=15):
@@ -521,7 +521,7 @@ if RADIOMIC_FEATURES:
                 f"{feature}",
                 value=float(default_val),
                 format="%.6f",
-                key=f"radiomic_{feature}"
+                key=f"radiomic_{feature}_{st.session_state.clear_clinical_counter}"
             )
     else:
         for feature in RADIOMIC_FEATURES:
@@ -534,6 +534,11 @@ if RADIOMIC_FEATURES:
 if CLINICAL_FEATURES:
     st.sidebar.subheader("Clinical Features (Please enter raw values manually)")
     
+    # Add clear button
+    if st.sidebar.button("Clear All Clinical Values", type="secondary", use_container_width=True):
+        st.session_state.clear_clinical_counter += 1
+        st.rerun()
+    
     clinical_feature_types = {}
     if shap_background_df is not None:
         for feature in CLINICAL_FEATURES:
@@ -544,7 +549,12 @@ if CLINICAL_FEATURES:
                 clinical_feature_types[feature] = ('continuous', None)
     
     for feature in CLINICAL_FEATURES:
-        default_val = default_input_values.get(feature, 0.0)
+        # Use 0.0 as default when clear button is clicked, otherwise use default from data
+        if st.session_state.clear_clinical_counter > 0:
+            default_val = 0.0
+        else:
+            default_val = default_input_values.get(feature, 0.0)
+        
         var_type, unique_vals = clinical_feature_types.get(feature, ('continuous', None))
         
         if var_type == 'binary' and unique_vals is not None:
@@ -555,13 +565,13 @@ if CLINICAL_FEATURES:
                 f"{feature}",
                 options=unique_vals,
                 index=unique_vals.index(default_val) if default_val in unique_vals else 0,
-                key=f"clinical_{feature}"
+                key=f"clinical_{feature}_{st.session_state.clear_clinical_counter}"
             )
         else:
             input_values[feature] = st.sidebar.number_input(
                 f"{feature}",
                 value=float(default_val) if isinstance(default_val, (int, float, np.number)) else 0.0,
-                key=f"clinical_{feature}",
+                key=f"clinical_{feature}_{st.session_state.clear_clinical_counter}",
                 format="%.2f"
             )
 
