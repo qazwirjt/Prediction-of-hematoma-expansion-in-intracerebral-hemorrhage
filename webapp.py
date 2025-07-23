@@ -425,7 +425,7 @@ def preprocess_input(input_data_dict, feature_order_list, standardization_params
         return None
 
 # --- 3. Streamlit App Interface ---
-st.title("Radiomics Model Prediction & SHAP Interpretability Analysis")
+st.title("Radiomics Model for The Prediction of Hematoma Expansion & SHAP Analysis")
 
 # --- Sidebar Configuration ---
 st.sidebar.header("Model Selection")
