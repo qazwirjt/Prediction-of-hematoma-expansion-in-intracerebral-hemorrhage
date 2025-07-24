@@ -705,9 +705,22 @@ if st.sidebar.button("Run Prediction & Analysis", type="primary", use_container_
                                 # Add feature importance table
                                 with st.expander("View detailed feature importance", expanded=False):
                                     # Extract SHAP values and create DataFrame
+                                    # 处理SHAP值的维度问题
+                                    if hasattr(shap_values_instance[0], 'values'):
+                                        shap_vals = shap_values_instance[0].values
+                                        # 如果是二维数组（多输出），取正类的值
+                                        if len(shap_vals.shape) > 1 and shap_vals.shape[-1] == 2:
+                                            shap_vals = shap_vals[:, 1]  # 取正类的SHAP值
+                                    else:
+                                        shap_vals = shap_values_instance[0]
+                                    
+                                    # 确保是一维数组
+                                    if hasattr(shap_vals, 'flatten'):
+                                        shap_vals = shap_vals.flatten()
+                                    
                                     feature_importance = pd.DataFrame({
                                         'Feature Name': FEATURE_ORDER,
-                                        'SHAP Value': shap_values_instance[0].values,
+                                        'SHAP Value': shap_vals,
                                         'Feature Value': processed_input_df.iloc[0].values
                                     })
                                     
