@@ -44,32 +44,50 @@ if 'clear_clinical_counter' not in st.session_state:
 # --- 1. Helper Functions and Loading Functions ---
 def create_optimized_waterfall_plot(shap_values, feature_names=None, max_display=15):
     """Create optimized SHAP waterfall plot"""
-    # Set font for better display
+    # 处理多输出情况
+    if hasattr(shap_values, 'values') and len(shap_values.values.shape) > 1:
+        # 如果是二分类，取正类的SHAP值
+        if shap_values.values.shape[-1] == 2:
+            # 处理base_values
+            if hasattr(shap_values.base_values, '__len__') and len(shap_values.base_values) == 2:
+                base_value = shap_values.base_values[1]
+            else:
+                base_value = shap_values.base_values
+            
+            # 创建新的Explanation对象，只包含正类的SHAP值
+            shap_values = shap.Explanation(
+                values=shap_values.values[..., 1],  # 取最后一个维度的第二个值（正类）
+                base_values=base_value,
+                data=shap_values.data if hasattr(shap_values, 'data') else None,
+                feature_names=shap_values.feature_names if hasattr(shap_values, 'feature_names') else feature_names
+            )
+    
+    # 设置字体以便更好地显示
     plt.rcParams['font.sans-serif'] = ['DejaVu Sans', 'SimHei', 'Arial Unicode MS']
     plt.rcParams['axes.unicode_minus'] = False
     
-    # Create figure
+    # 创建图形
     fig = plt.figure(figsize=(10, min(max_display * 0.5 + 2, 8)))
     ax = plt.gca()
     
-    # Generate waterfall plot
+    # 生成瀑布图
     shap.waterfall_plot(
         shap_values, 
         show=False, 
         max_display=max_display
     )
     
-    # Optimize layout
+    # 优化布局
     plt.subplots_adjust(left=0.4, right=0.95, top=0.92, bottom=0.08)
     
-    # Adjust font sizes
+    # 调整字体大小
     ax.tick_params(axis='y', labelsize=10)
     ax.tick_params(axis='x', labelsize=11)
     
-    # Add grid lines
+    # 添加网格线
     ax.grid(True, axis='x', alpha=0.3, linestyle='--')
     
-    # Set title
+    # 设置标题
     ax.set_title('SHAP Feature Contribution Analysis', fontsize=14, fontweight='bold', pad=15)
     ax.set_xlabel('SHAP Value (Impact on Prediction)', fontsize=12)
     
